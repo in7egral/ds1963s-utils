@@ -80,65 +80,70 @@ static SMALLINT ProgramAvailable[MAX_PORTNUM];
 //
 SMALLINT owTouchReset(int portnum)
 {
-   uchar readbuffer[10],sendpacket[10];
-   uchar sendlen=0;
+	uchar readbuffer[10],sendpacket[10];
+	uchar sendlen=0;
 
-   if (dodebug)
-      printf("\nRST ");//??????????????
+	if (dodebug)
+	printf("\nRST ");//??????????????
 
-   // make sure normal level
-   owLevel(portnum,MODE_NORMAL);
+	// make sure normal level
+	owLevel(portnum,MODE_NORMAL);
 
-   // check if correct mode
-   if (UMode[portnum] != MODSEL_COMMAND)
-   {
-      UMode[portnum] = MODSEL_COMMAND;
-      sendpacket[sendlen++] = MODE_COMMAND;
-   }
+	// check if correct mode
+	if (UMode[portnum] != MODSEL_COMMAND)
+	{
+		UMode[portnum] = MODSEL_COMMAND;
+		sendpacket[sendlen++] = MODE_COMMAND;
+	}
 
-   // construct the command
-   sendpacket[sendlen++] = (uchar)(CMD_COMM | FUNCTSEL_RESET | USpeed[portnum]);
+	// construct the command
+	sendpacket[sendlen++] = (uchar)(CMD_COMM | FUNCTSEL_RESET | USpeed[portnum]);
 
-   // flush the buffers
-   FlushCOM(portnum);
+	// flush the buffers
+	FlushCOM(portnum);
 
-   // send the packet
-   if (WriteCOM(portnum,sendlen,sendpacket))
-   {
-      // read back the 1 byte response
-      if (ReadCOM(portnum,1,readbuffer) == 1)
-      {
-         // make sure this byte looks like a reset byte
-         if (((readbuffer[0] & RB_RESET_MASK) == RB_PRESENCE) ||
-             ((readbuffer[0] & RB_RESET_MASK) == RB_ALARMPRESENCE))
-         {
-            // check if programming voltage available
-            ProgramAvailable[portnum] = ((readbuffer[0] & 0x20) == 0x20);
-            UVersion[portnum] = (readbuffer[0] & VERSION_MASK);
+	// send the packet
+	msDelay(100);
+	if (WriteCOM(portnum,sendlen,sendpacket))
+	{
+		// read back the 1 byte response
+		int try_count = 5;
+		while (try_count--)
+		{
+			msDelay(100);
+			int count = ReadCOM(portnum,1,readbuffer);
+			if (count == 1)
+			{
+				// make sure this byte looks like a reset byte
+				if (((readbuffer[0] & RB_RESET_MASK) == RB_PRESENCE) ||
+					((readbuffer[0] & RB_RESET_MASK) == RB_ALARMPRESENCE))
+				{
+					// check if programming voltage available
+					ProgramAvailable[portnum] = ((readbuffer[0] & 0x20) == 0x20);
+					UVersion[portnum] = (readbuffer[0] & VERSION_MASK);
+					
+					// only check for alarm pulse if DS2404 present and not using THE LINK
+					if ((FAMILY_CODE_04_ALARM_TOUCHRESET_COMPLIANCE) &&
+						(UVersion[portnum] != VER_LINK))
+					{
+						msDelay(5); // delay 5 ms to give DS1994 enough time
+						FlushCOM(portnum);
+					}
+					return TRUE;
+				}
+				else
+					OWERROR(OWERROR_RESET_FAILED);
+			}
+		}
+		OWERROR(OWERROR_READCOM_FAILED);
+	}
+	else
+		OWERROR(OWERROR_WRITECOM_FAILED);
 
-            // only check for alarm pulse if DS2404 present and not using THE LINK
-            if ((FAMILY_CODE_04_ALARM_TOUCHRESET_COMPLIANCE) &&
-                (UVersion[portnum] != VER_LINK))
-            {
-               msDelay(5); // delay 5 ms to give DS1994 enough time
-               FlushCOM(portnum);
-            }
-            return TRUE;
-         }
-         else
-            OWERROR(OWERROR_RESET_FAILED);
+	// an error occured so re-sync with DS2480
+	DS2480Detect(portnum);
 
-      }
-      else
-         OWERROR(OWERROR_READCOM_FAILED);
-   }
-   else
-      OWERROR(OWERROR_WRITECOM_FAILED);
-
-   // an error occured so re-sync with DS2480
-   DS2480Detect(portnum);
-
-   return FALSE;
+	return FALSE;
 }
 
 //--------------------------------------------------------------------------
@@ -156,49 +161,51 @@ SMALLINT owTouchReset(int portnum)
 //
 SMALLINT owTouchBit(int portnum, SMALLINT sendbit)
 {
-   uchar readbuffer[10],sendpacket[10];
-   uchar sendlen=0;
+	uchar readbuffer[10],sendpacket[10];
+	uchar sendlen=0;
 
-   // make sure normal level
-   owLevel(portnum,MODE_NORMAL);
+	// make sure normal level
+	owLevel(portnum,MODE_NORMAL);
 
-   // check if correct mode
-   if (UMode[portnum] != MODSEL_COMMAND)
-   {
-      UMode[portnum] = MODSEL_COMMAND;
-      sendpacket[sendlen++] = MODE_COMMAND;
-   }
+	// check if correct mode
+	if (UMode[portnum] != MODSEL_COMMAND)
+	{
+		UMode[portnum] = MODSEL_COMMAND;
+		sendpacket[sendlen++] = MODE_COMMAND;
+	}
 
-   // construct the command
-   sendpacket[sendlen] = (sendbit != 0) ? BITPOL_ONE : BITPOL_ZERO;
-   sendpacket[sendlen++] |= CMD_COMM | FUNCTSEL_BIT | USpeed[portnum];
+	// construct the command
+	sendpacket[sendlen] = (sendbit != 0) ? BITPOL_ONE : BITPOL_ZERO;
+	sendpacket[sendlen++] |= CMD_COMM | FUNCTSEL_BIT | USpeed[portnum];
 
-   // flush the buffers
-   FlushCOM(portnum);
+	// flush the buffers
+	FlushCOM(portnum);
 
-   // send the packet
-   if (WriteCOM(portnum,sendlen,sendpacket))
-   {
-      // read back the response
-      if (ReadCOM(portnum,1,readbuffer) == 1)
-      {
-         // interpret the response
-         if (((readbuffer[0] & 0xE0) == 0x80) &&
-             ((readbuffer[0] & RB_BIT_MASK) == RB_BIT_ONE))
-            return 1;
-         else
-            return 0;
-      }
-      else
-         OWERROR(OWERROR_READCOM_FAILED);
-   }
-   else
-      OWERROR(OWERROR_WRITECOM_FAILED);
+	// send the packet
+	msDelay(100);
+	if (WriteCOM(portnum,sendlen,sendpacket))
+	{
+		// read back the response
+		msDelay(100);
+		if (ReadCOM(portnum,1,readbuffer) == 1)
+		{
+			// interpret the response
+			if (((readbuffer[0] & 0xE0) == 0x80) &&
+				((readbuffer[0] & RB_BIT_MASK) == RB_BIT_ONE))
+				return 1;
+			else
+				return 0;
+		}
+		else
+			OWERROR(OWERROR_READCOM_FAILED);
+	}
+	else
+		OWERROR(OWERROR_WRITECOM_FAILED);
 
-   // an error occured so re-sync with DS2480
-   DS2480Detect(portnum);
+	// an error occured so re-sync with DS2480
+	DS2480Detect(portnum);
 
-   return 0;
+	return 0;
 }
 
 //--------------------------------------------------------------------------
@@ -215,7 +222,7 @@ SMALLINT owTouchBit(int portnum, SMALLINT sendbit)
 //
 SMALLINT owWriteByte(int portnum, SMALLINT sendbyte)
 {
-   return (owTouchByte(portnum,sendbyte) == (0xff & sendbyte)) ? TRUE : FALSE;
+	return (owTouchByte(portnum,sendbyte) == (0xff & sendbyte)) ? TRUE : FALSE;
 }
 
 
@@ -230,7 +237,7 @@ SMALLINT owWriteByte(int portnum, SMALLINT sendbyte)
 //
 SMALLINT owReadByte(int portnum)
 {
-   return owTouchByte(portnum,(SMALLINT)0xFF);
+	return owTouchByte(portnum,(SMALLINT)0xFF);
 }
 
 //--------------------------------------------------------------------------
@@ -247,51 +254,54 @@ SMALLINT owReadByte(int portnum)
 //
 SMALLINT owTouchByte(int portnum, SMALLINT sendbyte)
 {
-   uchar readbuffer[10],sendpacket[10];
-   uchar sendlen=0;
+	uchar readbuffer[10],sendpacket[10];
+	uchar sendlen=0;
 
-   // make sure normal level
-   owLevel(portnum,MODE_NORMAL);
+	// make sure normal level
+	owLevel(portnum,MODE_NORMAL);
 
-   // check if correct mode
-   if (UMode[portnum] != MODSEL_DATA)
-   {
-      UMode[portnum] = MODSEL_DATA;
-      sendpacket[sendlen++] = MODE_DATA;
-   }
+	// check if correct mode
+	if (UMode[portnum] != MODSEL_DATA)
+	{
+		UMode[portnum] = MODSEL_DATA;
+		sendpacket[sendlen++] = MODE_DATA;
+	}
 
-   // add the byte to send
-   sendpacket[sendlen++] = (uchar)sendbyte;
+	// add the byte to send
+	sendpacket[sendlen++] = (uchar)sendbyte;
 
-   // check for duplication of data that looks like COMMAND mode
-   if (sendbyte ==(SMALLINT)MODE_COMMAND)
-      sendpacket[sendlen++] = (uchar)sendbyte;
+	// check for duplication of data that looks like COMMAND mode
+	if (sendbyte ==(SMALLINT)MODE_COMMAND)
+		sendpacket[sendlen++] = (uchar)sendbyte;
 
-   // flush the buffers
-   FlushCOM(portnum);
+	// flush the buffers
+	FlushCOM(portnum);
 
-   // send the packet
-   if (WriteCOM(portnum,sendlen,sendpacket))
-   {
-      // read back the 1 byte response
-      if (ReadCOM(portnum,1,readbuffer) == 1)
-      {
-         if (dodebug)
-            printf("%02X ",readbuffer[0]);//??????????????
+	// send the packet
+	msDelay(100);
+	if (WriteCOM(portnum,sendlen,sendpacket))
+	{
+		// read back the 1 byte response
+		msDelay(200);
+		int count = ReadCOM(portnum,1,readbuffer);
+		if (count == 1)
+		{
+			if (dodebug)
+				printf("%02X ",readbuffer[0]);//??????????????
 
-          // return the response
-          return (int)readbuffer[0];
-      }
-      else
-         OWERROR(OWERROR_READCOM_FAILED);
-   }
-   else
-      OWERROR(OWERROR_WRITECOM_FAILED);
+			// return the response
+			return (int)readbuffer[0];
+		}
+		else
+			OWERROR(OWERROR_READCOM_FAILED);
+	}
+	else
+		OWERROR(OWERROR_WRITECOM_FAILED);
 
-   // an error occured so re-sync with DS2480
-   DS2480Detect(portnum);
+	// an error occured so re-sync with DS2480
+	DS2480Detect(portnum);
 
-   return 0;
+	return 0;
 }
 
 //--------------------------------------------------------------------------
@@ -307,9 +317,9 @@ SMALLINT owTouchByte(int portnum, SMALLINT sendbyte)
 //
 SMALLINT owSpeed(int portnum, SMALLINT new_speed)
 {
-   uchar sendpacket[5];
-   uchar sendlen=0;
-   uchar rt = FALSE;
+	uchar sendpacket[5];
+	uchar sendlen=0;
+	uchar rt = FALSE;
 
    // check if change from current mode
    if (((new_speed == MODE_OVERDRIVE) &&
@@ -343,12 +353,12 @@ SMALLINT owSpeed(int portnum, SMALLINT new_speed)
       // if baud rate is set correctly then change DS2480 speed
       if (rt)
       {
-         // check if correct mode
-         if (UMode[portnum] != MODSEL_COMMAND)
-         {
-            UMode[portnum] = MODSEL_COMMAND;
-            sendpacket[sendlen++] = MODE_COMMAND;
-         }
+		  // check if correct mode
+		  if (UMode[portnum] != MODSEL_COMMAND)
+		  {
+			  UMode[portnum] = MODSEL_COMMAND;
+			  sendpacket[sendlen++] = MODE_COMMAND;
+		  }
 
          // proceed to set the DS2480 communication speed
          sendpacket[sendlen++] = CMD_COMM | FUNCTSEL_SEARCHOFF | USpeed[portnum];
@@ -356,10 +366,10 @@ SMALLINT owSpeed(int portnum, SMALLINT new_speed)
          // send the packet
          if (!WriteCOM(portnum,sendlen,sendpacket))
          {
-            OWERROR(OWERROR_WRITECOM_FAILED);
-            rt = FALSE;
-            // lost communication with DS2480 then reset
-            DS2480Detect(portnum);
+			 OWERROR(OWERROR_WRITECOM_FAILED);
+			 rt = FALSE;
+			 // lost communication with DS2480 then reset
+			 DS2480Detect(portnum);
          }
       }
    }

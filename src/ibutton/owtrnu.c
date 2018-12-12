@@ -77,63 +77,67 @@ static SMALLINT Copy_Scratchpad(int,int,SMALLINT);
 //
 SMALLINT owBlock(int portnum, SMALLINT do_reset, uchar *tran_buf, SMALLINT tran_len)
 {
-   uchar sendpacket[320];
-   uchar sendlen=0, i;
+	uchar sendpacket[320];
+	uchar sendlen=0, i;
 
-   // check for a block too big
-   if (tran_len > 160)
-   {
-      OWERROR(OWERROR_BLOCK_TOO_BIG);
-      return FALSE;
-   }
+	// check for a block too big
+	if (tran_len > 160)
+	{
+		OWERROR(OWERROR_BLOCK_TOO_BIG);
+		return FALSE;
+	}
 
-   // check if need to do a owTouchReset first
-   if (do_reset)
-   {
-      if (!owTouchReset(portnum))
-      {
-         OWERROR(OWERROR_NO_DEVICES_ON_NET);
-         return FALSE;
-      }
-   }
+	// check if need to do a owTouchReset first
+	if (do_reset)
+	{
+		if (!owTouchReset(portnum))
+		{
+			OWERROR(OWERROR_NO_DEVICES_ON_NET);
+			return FALSE;
+		}
+	}
 
-   // construct the packet to send to the DS2480
-   // check if correct mode
-   if (UMode[portnum] != MODSEL_DATA)
-   {
-      UMode[portnum] = MODSEL_DATA;
-      sendpacket[sendlen++] = MODE_DATA;
-   }
+	// construct the packet to send to the DS2480
+	// check if correct mode
+	if (UMode[portnum] != MODSEL_DATA)
+	{
+		UMode[portnum] = MODSEL_DATA;
+		sendpacket[sendlen++] = MODE_DATA;
+	}
 
-   // add the bytes to send
-   for (i = 0; i < tran_len; i++)
-   {
-      sendpacket[sendlen++] = tran_buf[i];
+	// add the bytes to send
+	for (i = 0; i < tran_len; i++)
+	{
+		sendpacket[sendlen++] = tran_buf[i];
 
-      // check for duplication of data that looks like COMMAND mode
-      if (tran_buf[i] == MODE_COMMAND)
-         sendpacket[sendlen++] = tran_buf[i];
-   }
+		// check for duplication of data that looks like COMMAND mode
+		if (tran_buf[i] == MODE_COMMAND)
+			sendpacket[sendlen++] = tran_buf[i];
+	}
 
-   // flush the buffers
-   FlushCOM(portnum);
+	// flush the buffers
+	FlushCOM(portnum);
 
-   // send the packet
-   if (WriteCOM(portnum,sendlen,sendpacket))
-   {
-      // read back the response
-      if (ReadCOM(portnum,tran_len,tran_buf) == tran_len)
-         return TRUE;
-      else
-         OWERROR(OWERROR_READCOM_FAILED);
-   }
-   else
-      OWERROR(OWERROR_WRITECOM_FAILED);
+	// send the packet
+	msDelay(100);
+	if (WriteCOM(portnum,sendlen,sendpacket))
+	{
+		// read back the response
+		msDelay(100);
+		//memset(tran_buf, 0, tran_len);
+		int read_count = ReadCOM(portnum,tran_len,tran_buf);
+		if (read_count == tran_len)
+			return TRUE;
+		else
+			OWERROR(OWERROR_READCOM_FAILED);
+	}
+	else
+		OWERROR(OWERROR_WRITECOM_FAILED);
 
-   // an error occured so re-sync with DS2480
-   DS2480Detect(portnum);
+	// an error occured so re-sync with DS2480
+	DS2480Detect(portnum);
 
-   return FALSE;
+	return FALSE;
 }
 
 //--------------------------------------------------------------------------

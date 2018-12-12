@@ -218,89 +218,89 @@ static SMALLINT needsFirst = FALSE;
  */
 SMALLINT FindNewSHA(int portnum, uchar* devAN, SMALLINT resetList)
 {
-   uchar ROM[8];
-   uchar tempList[MAX_SHA_IBUTTONS] = {0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-                                       0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
-   int tempIndex = 0, i;
-   SMALLINT hasDevices = TRUE, completeList = FALSE;
+	uchar ROM[8];
+	uchar tempList[MAX_SHA_IBUTTONS] = {0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+									   0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
+	int tempIndex = 0, i;
+	SMALLINT hasDevices = TRUE, completeList = FALSE;
 
-   /* force back to standard speed */
-   if(MODE_NORMAL != owSpeed(portnum,MODE_NORMAL))
-   {
-      OWERROR(OWERROR_LEVEL_FAILED);
-      return FALSE;
-   }
+	/* force back to standard speed */
+	if(MODE_NORMAL != owSpeed(portnum,MODE_NORMAL))
+	{
+		OWERROR(OWERROR_LEVEL_FAILED);
+		return FALSE;
+	}
 
-   in_overdrive[portnum&0x0FF] = FALSE;
+	in_overdrive[portnum&0x0FF] = FALSE;
 
-   /* get first device in list with the specified family */
-   if(needsFirst || resetList)
-   {
-      hasDevices = owFirst(portnum, TRUE, FALSE);
-      completeList = TRUE;
-      if(resetList)
-         listIndex = 0;
-   }
-   else
-   {
-      hasDevices = owNext(portnum, TRUE, FALSE);
-   }
+	/* get first device in list with the specified family */
+	if(needsFirst || resetList)
+	{
+		hasDevices = owFirst(portnum, TRUE, FALSE);
+		completeList = TRUE;
+		if(resetList)
+			listIndex = 0;
+	}
+	else
+	{
+		hasDevices = owNext(portnum, TRUE, FALSE);
+	}
 
-   if(hasDevices)
-   {
-      do
-      {
-         /* verify correct device type */
-         owSerialNum(portnum, ROM, TRUE);
-         tempList[tempIndex++] = ROM[7];
+	if(hasDevices)
+	{
+		do
+		{
+			/* verify correct device type */
+			owSerialNum(portnum, ROM, TRUE);
+			tempList[tempIndex++] = ROM[7];
 
-         /* compare crc to complete list of ROMs */
-         for(i=0; i<listIndex; i++)
-         {
-            if(ROM[7] == ListOfKnownSHA[portnum&0x0FF][i])
-               break;
-         }
+			/* compare crc to complete list of ROMs */
+			for(i=0; i<listIndex; i++)
+			{
+				if(ROM[7] == ListOfKnownSHA[portnum&0x0FF][i])
+				break;
+			}
 
-         /* found no match; */
-         if(i==listIndex)
-         {
-            /* check if correct type and not copr_rom */
-            if ((SHA_FAMILY_CODE   == (ROM[0] & 0x7F)) ||
-                (SHA33_FAMILY_CODE == (ROM[0] & 0x7F)))
-            {
-               /* save the ROM to the return buffer */
-               owSerialNum(portnum,devAN,TRUE);
-               ListOfKnownSHA[portnum&0x0FF][listIndex++] = devAN[7];
-               return TRUE;
-            }
-         }
-      }
-      while(owNext(portnum, TRUE, FALSE));
-   }
+			/* found no match; */
+			if(i==listIndex)
+			{
+				/* check if correct type and not copr_rom */
+				if ((SHA_FAMILY_CODE   == (ROM[0] & 0x7F)) ||
+					(SHA33_FAMILY_CODE == (ROM[0] & 0x7F)))
+				{
+					/* save the ROM to the return buffer */
+					owSerialNum(portnum,devAN,TRUE);
+					ListOfKnownSHA[portnum&0x0FF][listIndex++] = devAN[7];
+					return TRUE;
+				}
+			}
+		}
+		while(owNext(portnum, TRUE, FALSE));
+	}
 
-   /* depleted the list, start over from beginning next time */
-   needsFirst = TRUE;
+	/* depleted the list, start over from beginning next time */
+	needsFirst = TRUE;
 
-   if(completeList)
-   {
-      /* known list is triple-buffered, listBuffer is intermediate
-       * buffer.  tempList is the immediate buffer, while
-       * ListOfKnownSHA is the final buffer.
-       */
-      if( (memcmp(tempList, listBuffer[portnum&0x0FF], MAX_SHA_IBUTTONS)==0) &&
-          tempIndex == indexBuffer )
-      {
-         memcpy(ListOfKnownSHA[portnum&0x0FF], tempList, MAX_SHA_IBUTTONS);
-         listIndex = tempIndex;
-      }
-      else
-      {
-         memcpy(listBuffer[portnum&0x0FF], tempList, MAX_SHA_IBUTTONS);
-         indexBuffer = tempIndex;
-      }
+	if(completeList)
+	{
+		/* known list is triple-buffered, listBuffer is intermediate
+		 * buffer.  tempList is the immediate buffer, while
+		 * ListOfKnownSHA is the final buffer.
+		 */
+		if( (memcmp(tempList, listBuffer[portnum&0x0FF], MAX_SHA_IBUTTONS)==0) &&
+		   tempIndex == indexBuffer )
+		{
+			memcpy(ListOfKnownSHA[portnum&0x0FF], tempList, MAX_SHA_IBUTTONS);
+			listIndex = tempIndex;
+		}
+		else
+		{
+			memcpy(listBuffer[portnum&0x0FF], tempList, MAX_SHA_IBUTTONS);
+			indexBuffer = tempIndex;
+		}
 
-   }
-   return FALSE;
+	}
+	return FALSE;
 }
 
 

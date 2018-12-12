@@ -92,7 +92,7 @@ static inline int __ds1963s_client_select_sha(struct ds1963s_client *ctx)
 	if (SelectSHA(ctx->copr.portnum) == FALSE) {
 		ctx->errno = DS1963S_ERROR_ACCESS;
 		return -1;
-        }
+	}
 
 	return 0;
 }
@@ -390,7 +390,7 @@ ds1963s_scratchpad_write_resume(struct ds1963s_client *ctx, uint16_t address,
 	/* payload */
 	memcpy(buf + i, data, len);
 
-	if (owBlock(portnum, 0, buf, len + i) == FALSE) {
+	if (owBlock(portnum, 0, buf, (int)len + i) == FALSE) {
 		ctx->errno = DS1963S_ERROR_TX_BLOCK;
 		return -1;
 	}
@@ -421,7 +421,7 @@ int ds1963s_client_memory_read(struct ds1963s_client *ctx, uint16_t address,
 	/* TA2, which is unused. */
 	block[2] = address >> 8;
 
-	OWASSERT(owBlock(portnum, 0, block, size + 3), OWERROR_BLOCK_FAILED, -1);
+	OWASSERT(owBlock(portnum, 0, block, (int)size + 3), OWERROR_BLOCK_FAILED, -1);
 	owTouchReset(portnum);
 
 	memcpy(data, &block[3], size);
@@ -464,13 +464,13 @@ int ds1963s_client_memory_write(struct ds1963s_client *ctx, uint16_t address,
 	         OWERROR_READ_SCRATCHPAD_FAILED, -1);
 
 	/* We latched the data to scratchpad properly, copy to memory. */
-	OWASSERT(CopyScratchpadSHA18(portnum, address, size, TRUE),
+	OWASSERT(CopyScratchpadSHA18(portnum, address, (int)size, TRUE),
 	         OWERROR_COPY_SCRATCHPAD_FAILED, -1);
 
 	return 0;
 }
 
-inline int __write_cycle_address(int write_cycle_type)
+int __write_cycle_address(int write_cycle_type)
 {
 	assert(write_cycle_type >= WRITE_CYCLE_DATA_8);
 	assert(write_cycle_type <= WRITE_CYCLE_SECRET_7);
@@ -602,7 +602,7 @@ int ds1963s_client_secret_write(struct ds1963s_client *ctx, int secret,
 		return -1;
 	}
 
-        secret_addr = 0x200 + secret * 8;
+	secret_addr = 0x200 + secret * 8;
 
 	/* Erase the scratchpad to clear the HIDE flag. */
 	if (ds1963s_client_scratchpad_erase(ctx) == -1)
@@ -613,7 +613,7 @@ int ds1963s_client_secret_write(struct ds1963s_client *ctx, int secret,
 		return -1;
 
 	/* Read it back to validate it. */
-	if (ReadScratchpadSHA18(copr->portnum, &address, &es, buf, 0) == FALSE) {
+	if (ReadScratchpadSHA18(copr->portnum, &address, &es, buf, TRUE) == FALSE) {
 		ctx->errno = DS1963S_ERROR_SP_READ;
 		return -1;
 	}
@@ -629,7 +629,7 @@ int ds1963s_client_secret_write(struct ds1963s_client *ctx, int secret,
 		return -1;
 
 	/* Read back address and es for validation. */
-	if (ReadScratchpadSHA18(copr->portnum, &address, &es, buf, 0) == FALSE) {
+	if (ReadScratchpadSHA18(copr->portnum, &address, &es, buf, TRUE) == FALSE) {
 		ctx->errno = DS1963S_ERROR_SP_READ;
 		return -1;
 	}
@@ -645,7 +645,8 @@ int ds1963s_client_secret_write(struct ds1963s_client *ctx, int secret,
 	}
 
 	/* Copy scratchpad data to the secret. */
-	if (CopyScratchpadSHA18(copr->portnum, secret_addr, len, 0) == FALSE) {
+	if (CopyScratchpadSHA18(copr->portnum, secret_addr, (int)len, TRUE) == FALSE) {
+		//return 0;
 		ctx->errno = DS1963S_ERROR_SP_COPY;
 		return -1;
 	}

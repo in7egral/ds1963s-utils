@@ -253,7 +253,7 @@ void CloseCOM(int portnum)
 SMALLINT WriteCOM(int portnum, int outlen, uchar *outbuf)
 {
    long count = outlen;
-   int i = write(fd[portnum], outbuf, outlen);
+   int i = (int)write(fd[portnum], outbuf, (int)outlen);
 
    tcdrain(fd[portnum]);
    return (i == count);

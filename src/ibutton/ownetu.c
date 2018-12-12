@@ -113,7 +113,7 @@ SMALLINT owNext(int portnum, SMALLINT do_reset, SMALLINT alarm_only)
    uchar tmp_serial_num[8];
    uchar readbuffer[20],sendpacket[40];
    uchar i,sendlen=0;
-   uchar lastcrc8;
+   uchar lastcrc8=0;
 
    // if the last call was the last one
    if (LastDevice[portnum])
@@ -195,88 +195,91 @@ SMALLINT owNext(int portnum, SMALLINT do_reset, SMALLINT alarm_only)
       }
    }
 
-   // change back to command mode
-   UMode[portnum] = MODSEL_COMMAND;
-   sendpacket[sendlen++] = MODE_COMMAND;
+	// change back to command mode
+	UMode[portnum] = MODSEL_COMMAND;
+	sendpacket[sendlen++] = MODE_COMMAND;
 
-   // search OFF
-   sendpacket[sendlen++] = (uchar)(CMD_COMM | FUNCTSEL_SEARCHOFF | USpeed[portnum]);
+	// search OFF
+	sendpacket[sendlen++] = (uchar)(CMD_COMM | FUNCTSEL_SEARCHOFF | USpeed[portnum]);
 
-   // flush the buffers
-   FlushCOM(portnum);
+	// flush the buffers
+	FlushCOM(portnum);
 
-   // send the packet
-   if (WriteCOM(portnum,sendlen,sendpacket))
-   {
-      // read back the 1 byte response
-      if (ReadCOM(portnum,17,readbuffer) == 17)
-      {
-         // interpret the bit stream
-         for (i = 0; i < 64; i++)
-         {
-            // get the SerialNum bit
-            bitacc(WRITE_FUNCTION,
-                   bitacc(READ_FUNCTION,0,(short)(i * 2 + 1),&readbuffer[1]),
-                   i,
-                   &tmp_serial_num[0]);
-            // check LastDiscrepancy
-            if ((bitacc(READ_FUNCTION,0,(short)(i * 2),&readbuffer[1]) == 1) &&
-                (bitacc(READ_FUNCTION,0,(short)(i * 2 + 1),&readbuffer[1]) == 0))
-            {
-               last_zero = i + 1;
-               // check LastFamilyDiscrepancy
-               if (i < 8)
-                  LastFamilyDiscrepancy[portnum] = i + 1;
-            }
-         }
-
-         // do dowcrc
-         setcrc8(portnum,0);
+	// send the packet
+	msDelay(100);
+	if (WriteCOM(portnum,sendlen,sendpacket))
+	{
+		// read back the 1 byte response
+		msDelay(100);
+		memset(readbuffer, 0, sizeof(readbuffer));
+		int count = ReadCOM(portnum,17,readbuffer);
+		if (count == 17)
+		{
+			// interpret the bit stream
+			for (i = 0; i < 64; i++)
+			{
+				// get the SerialNum bit
+				bitacc(WRITE_FUNCTION,
+					   bitacc(READ_FUNCTION,0,(short)(i * 2 + 1),&readbuffer[1]),
+					   i,
+					   &tmp_serial_num[0]);
+				// check LastDiscrepancy
+				if ((bitacc(READ_FUNCTION,0,(short)(i * 2),&readbuffer[1]) == 1) &&
+					(bitacc(READ_FUNCTION,0,(short)(i * 2 + 1),&readbuffer[1]) == 0))
+				{
+					last_zero = i + 1;
+					// check LastFamilyDiscrepancy
+					if (i < 8)
+						LastFamilyDiscrepancy[portnum] = i + 1;
+				}
+			}
+			
+         	// do dowcrc
+			setcrc8(portnum,0);
 //         for (i = 0; i < 8; i++)
 //            lastcrc8 = docrc8(portnum,tmp_serial_num[i]);
          // The above has been commented out for the DS28E04.  The
          // below has been added to accomidate the valid CRC with the
          // possible changing serial number values of the DS28E04.
-         for (i = 0; i < 8; i++)
-         {
-            if (((tmp_serial_num[0] & 0x7F) == 0x1C) && (i == 1))
-               lastcrc8 = docrc8(portnum,0x7F);
-            else            
-               lastcrc8 = docrc8(portnum,tmp_serial_num[i]);
-         }
+			for (i = 0; i < 8; i++)
+			{
+				if (((tmp_serial_num[0] & 0x7F) == 0x1C) && (i == 1))
+					lastcrc8 = docrc8(portnum,0x7F);
+				else
+					lastcrc8 = docrc8(portnum,tmp_serial_num[i]);
+			}
 
+			// check results
+			if ((lastcrc8 != 0) || (LastDiscrepancy[portnum] == 63) || (tmp_serial_num[0] == 0))
+			{
+				// error during search
+				// reset the search
+				LastDiscrepancy[portnum] = 0;
+				LastDevice[portnum] = FALSE;
+				LastFamilyDiscrepancy[portnum] = 0;
+				OWERROR(OWERROR_SEARCH_ERROR);
+				return FALSE;
+			}
+			// successful search
+			else
+			{
+				// set the last discrepancy
+				LastDiscrepancy[portnum] = last_zero;
 
-         // check results
-         if ((lastcrc8 != 0) || (LastDiscrepancy[portnum] == 63) || (tmp_serial_num[0] == 0))
-         {
-            // error during search
-            // reset the search
-            LastDiscrepancy[portnum] = 0;
-            LastDevice[portnum] = FALSE;
-            LastFamilyDiscrepancy[portnum] = 0;
-            OWERROR(OWERROR_SEARCH_ERROR);
-            return FALSE;
-         }
-         // successful search
-         else
-         {
-            // set the last discrepancy
-            LastDiscrepancy[portnum] = last_zero;
+				// check for last device
+				if (LastDiscrepancy[portnum] == 0)
+					LastDevice[portnum] = TRUE;
 
-            // check for last device 
-            if (LastDiscrepancy[portnum] == 0)
-               LastDevice[portnum] = TRUE;
+				// copy the SerialNum to the buffer
+				for (i = 0; i < 8; i++)
+					SerialNum[portnum][i] = tmp_serial_num[i];
 
-            // copy the SerialNum to the buffer
-            for (i = 0; i < 8; i++)
-               SerialNum[portnum][i] = tmp_serial_num[i];
-
-            // set the count
-            return TRUE;
-         }
-      }
-      else
-         OWERROR(OWERROR_READCOM_FAILED);
+				// set the count
+				return TRUE;
+			}
+		}
+		else
+			OWERROR(OWERROR_READCOM_FAILED);
    }
    else
       OWERROR(OWERROR_WRITECOM_FAILED);
@@ -449,52 +452,52 @@ SMALLINT owAccess(int portnum)
 //
 SMALLINT owVerify(int portnum, SMALLINT alarm_only)
 {
-   uchar i,sendlen=0,goodbits=0,cnt=0,s,tst;
-   uchar sendpacket[50];
+	uchar i,sendlen=0,goodbits=0,cnt=0,s,tst;
+	uchar sendpacket[50];
 
-   // construct the search rom
-   if (alarm_only)
-      sendpacket[sendlen++] = 0xEC; // issue the alarming search command
-   else
-      sendpacket[sendlen++] = 0xF0; // issue the search command
-   // set all bits at first
-   for (i = 1; i <= 24; i++)
-      sendpacket[sendlen++] = 0xFF;
-   // now set or clear apropriate bits for search
-   for (i = 0; i < 64; i++)
-      bitacc(WRITE_FUNCTION,bitacc(READ_FUNCTION,0,i,&SerialNum[portnum][0]),(int)((i+1)*3-1),&sendpacket[1]);
+	// construct the search rom
+	if (alarm_only)
+		sendpacket[sendlen++] = 0xEC; // issue the alarming search command
+	else
+		sendpacket[sendlen++] = 0xF0; // issue the search command
+	// set all bits at first
+	for (i = 1; i <= 24; i++)
+		sendpacket[sendlen++] = 0xFF;
+	// now set or clear apropriate bits for search
+	for (i = 0; i < 64; i++)
+		bitacc(WRITE_FUNCTION,bitacc(READ_FUNCTION,0,i,&SerialNum[portnum][0]),(int)((i+1)*3-1),&sendpacket[1]);
 
-   // send/recieve the transfer buffer
-   if (owBlock(portnum,TRUE,sendpacket,sendlen))
-   {
-      // check results to see if it was a success
-      for (i = 0; i < 192; i += 3)
-      {
-         tst = (bitacc(READ_FUNCTION,0,i,&sendpacket[1]) << 1) |
-                bitacc(READ_FUNCTION,0,(int)(i+1),&sendpacket[1]);
+	// send/recieve the transfer buffer
+	if (owBlock(portnum,TRUE,sendpacket,sendlen))
+   	{
+		// check results to see if it was a success
+		for (i = 0; i < 192; i += 3)
+		{
+			tst = (bitacc(READ_FUNCTION,0,i,&sendpacket[1]) << 1) |
+			bitacc(READ_FUNCTION,0,(int)(i+1),&sendpacket[1]);
+			
+			s = bitacc(READ_FUNCTION,0,cnt++,&SerialNum[portnum][0]);
+			
+			if (tst == 0x03)  // no device on line
+			{
+				goodbits = 0;    // number of good bits set to zero
+				break;     // quit
+			}
 
-         s = bitacc(READ_FUNCTION,0,cnt++,&SerialNum[portnum][0]);
+			if (((s == 0x01) && (tst == 0x02)) ||
+				((s == 0x00) && (tst == 0x01))    )  // correct bit
+				goodbits++;  // count as a good bit
+		}
 
-         if (tst == 0x03)  // no device on line
-         {
-              goodbits = 0;    // number of good bits set to zero
-              break;     // quit
-         }
+		// check too see if there were enough good bits to be successful
+		if (goodbits >= 8)
+			return TRUE;
+   	}
+	else
+		OWERROR(OWERROR_BLOCK_FAILED);
 
-         if (((s == 0x01) && (tst == 0x02)) ||
-             ((s == 0x00) && (tst == 0x01))    )  // correct bit
-            goodbits++;  // count as a good bit
-      }
-
-      // check too see if there were enough good bits to be successful
-      if (goodbits >= 8)
-         return TRUE;
-   }
-   else
-      OWERROR(OWERROR_BLOCK_FAILED);
-
-   // block fail or device not present
-   return FALSE;
+	// block fail or device not present
+	return FALSE;
 }
 
 //----------------------------------------------------------------------

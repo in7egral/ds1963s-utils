@@ -141,7 +141,7 @@ ds2480_dev_command_mode(struct ds2480_device *dev, unsigned char byte)
 	int speed;
 
 	assert(dev != NULL);
-	assert(dev->mode == DS2480_COMMAND_MODE);
+	assert(dev->mode == DS2480_MODE_COMMAND);
 
 	/* All command codes have their least significant bit set. */
 	if ( (byte & 1) == 0)

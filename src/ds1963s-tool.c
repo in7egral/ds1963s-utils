@@ -449,7 +449,7 @@ ds1963s_tool_sign(struct ds1963s_tool *tool, int page, size_t size)
 	ds1963s_client_hash_print(hash);
 }
 
-inline int __dehex_char(char c)
+int __dehex_char(char c)
 {
 	if (c >= '0' && c <= '9')
 		return c - '0';
@@ -470,7 +470,7 @@ int __dehex(uint8_t *dst, const char *src, size_t n)
 	if (src_len == 0 || src_len % 2 != 0)
 		return -1;
 
-	for (i = 0; i < src_len; src_len++)
+	for (i = 0; i < src_len; ++i)
 		if (!isalnum(src[i]))
 			return -1;
 
@@ -520,7 +520,7 @@ static const struct option options[] =
 	{ NULL,			0,	NULL,	 0  }
 };
 
-const char optstr[] = "a:d:hr:p:s:ifw";
+const char optstr[] = "a:d:hr:p:t:s:ifw";
 
 int main(int argc, char **argv)
 {

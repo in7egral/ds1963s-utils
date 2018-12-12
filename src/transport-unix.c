@@ -8,6 +8,7 @@
  */
 #include <assert.h>
 #include <stdlib.h>
+#include <string.h>
 #include <errno.h>
 #include <unistd.h>
 #include <sys/socket.h>
@@ -107,7 +108,7 @@ int transport_unix_bind(struct transport *t, const char *pathname)
 	assert(t->private_data != NULL);
 
 	data = t->private_data;
-	memset(&sun, 0, sizeof sun);
+	memset((void *)&sun, 0, sizeof sun);
 	sun.sun_family = AF_UNIX;
 
 	/* If pathname is NULL, we use auto-binding. */
